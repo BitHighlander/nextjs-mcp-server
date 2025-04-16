@@ -1,0 +1,10 @@
+{
+  "name": "House Exploration MCP",
+  "description": "A Motion Control Protocol server for exploring a virtual house with rooms and items",
+  "version": "1.0.0",
+  "serverPath": "/api/sse",
+  "capabilities": [
+    "tools",
+    "resources"
+  ]
+} 
