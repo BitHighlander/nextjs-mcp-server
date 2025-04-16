@@ -1,9 +1,17 @@
 import { NextRequest } from 'next/server';
 import { sessions } from '@/lib/mcp-data';
 
+// Type definition for message handler
+type MessageHandler = (message: string) => Promise<void>;
+
 // Extend globalThis type for TypeScript
 declare global {
-  var __SSE_CONNECTIONS: Map<string, (message: string) => Promise<void>> | undefined;
+  var __SSE_CONNECTIONS: Map<string, MessageHandler> | undefined;
+}
+
+// Initialize global connections map if not exists
+if (!globalThis.__SSE_CONNECTIONS) {
+  globalThis.__SSE_CONNECTIONS = new Map<string, MessageHandler>();
 }
 
 // Create a ReadableStream for Server-Sent Events
@@ -25,11 +33,7 @@ export async function GET(req: NextRequest) {
           const sessionId = Date.now().toString(36) + Math.random().toString(36).substring(2);
           console.log(`[SSE] New connection established with sessionId: ${sessionId}`);
           
-          // Create a TransformStream for direct message passing
-          const { readable, writable } = new TransformStream();
-          const writer = writable.getWriter();
-          
-          // Store session data in Redis (without the actual controller)
+          // Store session data in Redis
           console.log('Storing session');
           await sessions.set(sessionId, { 
             hasActiveConnection: true,
@@ -47,8 +51,9 @@ export async function GET(req: NextRequest) {
           };
 
           // Register the session ID and messageHandler
-          globalThis.__SSE_CONNECTIONS = globalThis.__SSE_CONNECTIONS || new Map();
-          globalThis.__SSE_CONNECTIONS.set(sessionId, messageHandler);
+          if (globalThis.__SSE_CONNECTIONS) {
+            globalThis.__SSE_CONNECTIONS.set(sessionId, messageHandler);
+          }
           
           // Send initial ping to keep connection alive
           console.log('Sending initial ping');
