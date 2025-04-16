@@ -1,6 +1,11 @@
 import { NextRequest } from 'next/server';
 import { sessions } from '@/lib/mcp-data';
 
+// Extend globalThis type for TypeScript
+declare global {
+  var __SSE_CONNECTIONS: Map<string, (message: string) => Promise<void>> | undefined;
+}
+
 // Create a ReadableStream for Server-Sent Events
 export async function GET(req: NextRequest) {
   console.log('=== ROOT SSE REQUEST RECEIVED ===');
@@ -20,14 +25,31 @@ export async function GET(req: NextRequest) {
           const sessionId = Date.now().toString(36) + Math.random().toString(36).substring(2);
           console.log(`[SSE] New connection established with sessionId: ${sessionId}`);
           
-          // Store SSE controller for later use
+          // Create a TransformStream for direct message passing
+          const { readable, writable } = new TransformStream();
+          const writer = writable.getWriter();
+          
+          // Store session data in Redis (without the actual controller)
           console.log('Storing session');
-          const stored = await sessions.set(sessionId, { 
-            controller, 
-            initialized: false 
+          await sessions.set(sessionId, { 
+            hasActiveConnection: true,
+            initialized: false
           });
-          console.log('Session stored:', stored);
+          console.log('Session stored, Connection active');
 
+          // Setup the message handler from Redis events to client
+          const messageHandler = async (message: string) => {
+            try {
+              controller.enqueue(encoder.encode(message));
+            } catch (error) {
+              console.error('Error sending message to client:', error);
+            }
+          };
+
+          // Register the session ID and messageHandler
+          globalThis.__SSE_CONNECTIONS = globalThis.__SSE_CONNECTIONS || new Map();
+          globalThis.__SSE_CONNECTIONS.set(sessionId, messageHandler);
+          
           // Send initial ping to keep connection alive
           console.log('Sending initial ping');
           controller.enqueue(encoder.encode(`: ping\n\n`));
@@ -50,6 +72,9 @@ export async function GET(req: NextRequest) {
               console.error('Heartbeat error:', e);
               clearInterval(heartbeat);
               await sessions.delete(sessionId);
+              if (globalThis.__SSE_CONNECTIONS) {
+                globalThis.__SSE_CONNECTIONS.delete(sessionId);
+              }
               console.log(`[SSE] Heartbeat failed for sessionId: ${sessionId}`);
             }
           }, 3000);
@@ -61,6 +86,9 @@ export async function GET(req: NextRequest) {
             console.log('Connection aborted');
             clearInterval(heartbeat);
             await sessions.delete(sessionId);
+            if (globalThis.__SSE_CONNECTIONS) {
+              globalThis.__SSE_CONNECTIONS.delete(sessionId);
+            }
             console.log(`[SSE] Connection closed for sessionId: ${sessionId}`);
           });
           console.log('Abort listener set');

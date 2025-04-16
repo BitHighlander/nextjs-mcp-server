@@ -53,19 +53,16 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  console.log('Getting controller and creating encoder');
-  const controller = session.controller;
-  const encoder = new TextEncoder();
-
-  // Check if controller exists
-  if (!controller) {
-    console.error('Controller not found for session:', sessionId);
+  // Check if we have an active connection for this session
+  const messageHandler = globalThis.__SSE_CONNECTIONS?.get(sessionId);
+  if (!messageHandler) {
+    console.error('No active connection found for session:', sessionId);
     return NextResponse.json({
       jsonrpc: "2.0",
       id: rpcRequest.id,
       error: {
         code: -32603,
-        message: "Session controller not available"
+        message: "Session connection not available"
       }
     }, { status: 500 });
   }
@@ -90,11 +87,11 @@ export async function POST(req: NextRequest) {
         
         // Send ping first to keep connection alive
         console.log('Sending initialize ping');
-        controller.enqueue(encoder.encode(`: initialize ping\n\n`));
+        await messageHandler(`: initialize ping\n\n`);
         
         console.log('Sending initialize result');
-        controller.enqueue(encoder.encode(`event: message\n`));
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+        await messageHandler(`event: message\n`);
+        await messageHandler(`data: ${JSON.stringify({
           jsonrpc: "2.0",
           id: rpcRequest.id,
           result: {
@@ -110,18 +107,18 @@ export async function POST(req: NextRequest) {
               version: "1.0.0"
             }
           }
-        })}\n\n`));
+        })}\n\n`);
         
         // Send another ping to ensure data flow
         console.log('Sending post-initialize ping');
-        controller.enqueue(encoder.encode(`: post-initialize ping\n\n`));
+        await messageHandler(`: post-initialize ping\n\n`);
         console.log('Initialize method completed');
         break;
 
       case 'tools/list':
         console.log('Handling tools/list method');
-        controller.enqueue(encoder.encode(`event: message\n`));
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+        await messageHandler(`event: message\n`);
+        await messageHandler(`data: ${JSON.stringify({
           jsonrpc: "2.0",
           id: rpcRequest.id,
           result: {
@@ -193,7 +190,7 @@ export async function POST(req: NextRequest) {
             ],
             count: 6
           }
-        })}\n\n`));
+        })}\n\n`);
         console.log('tools/list method completed');
         break;
 
@@ -226,13 +223,13 @@ export async function POST(req: NextRequest) {
         const toolResult = await toolResponse.json();
         console.log('Tool result:', JSON.stringify(toolResult));
         
-        controller.enqueue(encoder.encode(`event: message\n`));
+        await messageHandler(`event: message\n`);
         if (toolResult.error) {
           console.log('Sending error response');
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(toolResult)}\n\n`));
+          await messageHandler(`data: ${JSON.stringify(toolResult)}\n\n`);
         } else {
           console.log('Sending success response');
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          await messageHandler(`data: ${JSON.stringify({
             jsonrpc: "2.0",
             id: rpcRequest.id,
             result: {
@@ -241,22 +238,22 @@ export async function POST(req: NextRequest) {
                 text: JSON.stringify(toolResult.result)
               }]
             }
-          })}\n\n`));
+          })}\n\n`);
         }
         console.log('tools/call method completed');
         break;
         
       default:
         console.log(`Unrecognized method: ${rpcRequest.method}`);
-        controller.enqueue(encoder.encode(`event: message\n`));
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+        await messageHandler(`event: message\n`);
+        await messageHandler(`data: ${JSON.stringify({
           jsonrpc: "2.0",
           id: rpcRequest.id,
           error: {
             code: -32601,
             message: `Method '${rpcRequest.method}' not recognized`
           }
-        })}\n\n`));
+        })}\n\n`);
         console.log('Default method handler completed');
     }
     console.log('Request processing completed successfully');

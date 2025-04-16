@@ -2,7 +2,7 @@ import Redis from 'ioredis';
 
 // Define types for session data
 interface SessionData {
-  controller?: ReadableStreamDefaultController;
+  hasActiveConnection?: boolean;
   initialized?: boolean;
   [key: string]: unknown;
 }
@@ -10,9 +10,6 @@ interface SessionData {
 // Initialize Redis client
 const redisUrl = process.env.REDIS_CONNECTION || 'redis://localhost:6379';
 const redis = new Redis(redisUrl);
-
-// In-memory controller mapping for current server instance
-const controllers = new Map<string, ReadableStreamDefaultController>();
 
 // Session management with Redis
 export const sessions = {
@@ -23,12 +20,6 @@ export const sessions = {
       
       // Retrieve the parsed session data
       const parsedSession = JSON.parse(sessionData) as SessionData;
-      
-      // Add the controller from in-memory mapping if it exists
-      if (controllers.has(sessionId)) {
-        parsedSession.controller = controllers.get(sessionId);
-      }
-      
       return parsedSession;
     } catch (error) {
       console.error('Redis get error:', error);
@@ -38,20 +29,8 @@ export const sessions = {
   
   async set(sessionId: string, sessionData: SessionData): Promise<boolean> {
     try {
-      // Store controller separately in memory since it can't be serialized
-      if (sessionData.controller) {
-        controllers.set(sessionId, sessionData.controller);
-        
-        // Create a copy of session data without the controller for Redis storage
-        const serializableSession = { ...sessionData };
-        delete serializableSession.controller;
-        
-        // Set with an expiration of 1 hour
-        await redis.set(`session:${sessionId}`, JSON.stringify(serializableSession), 'EX', 3600);
-      } else {
-        // Store the session data as is
-        await redis.set(`session:${sessionId}`, JSON.stringify(sessionData), 'EX', 3600);
-      }
+      // Set with an expiration of 1 hour
+      await redis.set(`session:${sessionId}`, JSON.stringify(sessionData), 'EX', 3600);
       return true;
     } catch (error) {
       console.error('Redis set error:', error);
@@ -61,9 +40,8 @@ export const sessions = {
   
   async delete(sessionId: string): Promise<boolean> {
     try {
-      // Remove from both Redis and memory
+      // Remove from Redis
       await redis.del(`session:${sessionId}`);
-      controllers.delete(sessionId);
       return true;
     } catch (error) {
       console.error('Redis delete error:', error);
@@ -81,7 +59,7 @@ export const sessions = {
     }
   },
   
-  // For local development testing - check if both Redis and memory have the session
+  // For testing - check if Redis has the session
   async has(sessionId: string): Promise<boolean> {
     try {
       const exists = await redis.exists(`session:${sessionId}`);
