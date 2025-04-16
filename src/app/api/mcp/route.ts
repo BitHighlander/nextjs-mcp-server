@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sessions, house, resources } from '@/lib/mcp-data';
+// Removed unused imports: sessions, house, resources
 
 // Handle GET requests to /api/mcp
 export async function GET(req: NextRequest) {

@@ -244,16 +244,16 @@ export async function POST(req: NextRequest) {
         console.log('Default method handler completed');
     }
     console.log('Request processing completed successfully');
-  } catch (error: any) {
+  } catch (error: Error | unknown) {
     console.error('Error processing request:', error);
-    console.error('Stack trace:', error.stack);
+    console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
     return NextResponse.json({
       jsonrpc: "2.0",
       id: rpcRequest.id,
       error: {
         code: -32603,
         message: "Internal server error",
-        data: error.message || String(error)
+        data: error instanceof Error ? error.message : String(error)
       }
     }, { status: 500 });
   }
