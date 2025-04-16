@@ -57,6 +57,19 @@ export async function POST(req: NextRequest) {
   const controller = session.controller;
   const encoder = new TextEncoder();
 
+  // Check if controller exists
+  if (!controller) {
+    console.error('Controller not found for session:', sessionId);
+    return NextResponse.json({
+      jsonrpc: "2.0",
+      id: rpcRequest.id,
+      error: {
+        code: -32603,
+        message: "Session controller not available"
+      }
+    }, { status: 500 });
+  }
+
   // Send minimal HTTP acknowledgment
   const response = {
     jsonrpc: "2.0",

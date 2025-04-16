@@ -1,21 +1,28 @@
 import Redis from 'ioredis';
 
+// Define types for session data
+interface SessionData {
+  controller?: ReadableStreamDefaultController;
+  initialized?: boolean;
+  [key: string]: unknown;
+}
+
 // Initialize Redis client
 const redisUrl = process.env.REDIS_CONNECTION || 'redis://localhost:6379';
 const redis = new Redis(redisUrl);
 
 // In-memory controller mapping for current server instance
-const controllers = new Map();
+const controllers = new Map<string, ReadableStreamDefaultController>();
 
 // Session management with Redis
 export const sessions = {
-  async get(sessionId: string) {
+  async get(sessionId: string): Promise<SessionData | null> {
     try {
       const sessionData = await redis.get(`session:${sessionId}`);
       if (!sessionData) return null;
       
       // Retrieve the parsed session data
-      const parsedSession = JSON.parse(sessionData);
+      const parsedSession = JSON.parse(sessionData) as SessionData;
       
       // Add the controller from in-memory mapping if it exists
       if (controllers.has(sessionId)) {
@@ -29,7 +36,7 @@ export const sessions = {
     }
   },
   
-  async set(sessionId: string, sessionData: any) {
+  async set(sessionId: string, sessionData: SessionData): Promise<boolean> {
     try {
       // Store controller separately in memory since it can't be serialized
       if (sessionData.controller) {
@@ -52,7 +59,7 @@ export const sessions = {
     }
   },
   
-  async delete(sessionId: string) {
+  async delete(sessionId: string): Promise<boolean> {
     try {
       // Remove from both Redis and memory
       await redis.del(`session:${sessionId}`);
@@ -64,7 +71,7 @@ export const sessions = {
     }
   },
   
-  async keys() {
+  async keys(): Promise<string[]> {
     try {
       const keys = await redis.keys('session:*');
       return keys.map(key => key.replace('session:', ''));
@@ -75,7 +82,7 @@ export const sessions = {
   },
   
   // For local development testing - check if both Redis and memory have the session
-  async has(sessionId: string) {
+  async has(sessionId: string): Promise<boolean> {
     try {
       const exists = await redis.exists(`session:${sessionId}`);
       return exists === 1;
