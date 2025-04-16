@@ -22,9 +22,10 @@ export async function POST(req: NextRequest) {
   }
 
   console.log('Looking up session:', sessionId);
-  console.log('Available sessions:', Array.from(sessions.keys()));
+  const sessionKeys = await sessions.keys();
+  console.log('Available sessions:', sessionKeys);
   
-  const session = sessions.get(sessionId);
+  const session = await sessions.get(sessionId);
   if (!session) {
     console.error('Invalid or expired session:', sessionId);
     return NextResponse.json({
@@ -71,6 +72,8 @@ export async function POST(req: NextRequest) {
       case 'initialize':
         console.log('Handling initialize method');
         session.initialized = true;
+        // Update session in Redis
+        await sessions.set(sessionId, session);
         
         // Send ping first to keep connection alive
         console.log('Sending initialize ping');

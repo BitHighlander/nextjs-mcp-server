@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     
     console.log('Creating ReadableStream');
     const stream = new ReadableStream({
-      start(controller) {
+      start: async (controller) => {
         console.log('Stream started');
         try {
           // Generate a session ID
@@ -22,11 +22,11 @@ export async function GET(req: NextRequest) {
           
           // Store SSE controller for later use
           console.log('Storing session');
-          sessions.set(sessionId, { 
+          const stored = await sessions.set(sessionId, { 
             controller, 
             initialized: false 
           });
-          console.log('Session stored:', sessions.has(sessionId));
+          console.log('Session stored:', stored);
 
           // Send initial ping to keep connection alive
           console.log('Sending initial ping');
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
           // Set up heartbeat interval
           console.log('Setting up heartbeat');
-          const heartbeat = setInterval(() => {
+          const heartbeat = setInterval(async () => {
             try {
               console.log('Sending heartbeat');
               controller.enqueue(encoder.encode(`: heartbeat\n\n`));
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
               // Connection might be closed
               console.error('Heartbeat error:', e);
               clearInterval(heartbeat);
-              sessions.delete(sessionId);
+              await sessions.delete(sessionId);
               console.log(`[SSE] Heartbeat failed for sessionId: ${sessionId}`);
             }
           }, 3000);
@@ -57,10 +57,10 @@ export async function GET(req: NextRequest) {
 
           // Clean up on connection close
           console.log('Setting up abort listener');
-          req.signal.addEventListener('abort', () => {
+          req.signal.addEventListener('abort', async () => {
             console.log('Connection aborted');
             clearInterval(heartbeat);
-            sessions.delete(sessionId);
+            await sessions.delete(sessionId);
             console.log(`[SSE] Connection closed for sessionId: ${sessionId}`);
           });
           console.log('Abort listener set');

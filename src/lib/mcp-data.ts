@@ -1,5 +1,90 @@
-// Store active SSE sessions
-export const sessions = new Map();
+import Redis from 'ioredis';
+
+// Initialize Redis client
+const redisUrl = process.env.REDIS_CONNECTION || 'redis://localhost:6379';
+const redis = new Redis(redisUrl);
+
+// In-memory controller mapping for current server instance
+const controllers = new Map();
+
+// Session management with Redis
+export const sessions = {
+  async get(sessionId: string) {
+    try {
+      const sessionData = await redis.get(`session:${sessionId}`);
+      if (!sessionData) return null;
+      
+      // Retrieve the parsed session data
+      const parsedSession = JSON.parse(sessionData);
+      
+      // Add the controller from in-memory mapping if it exists
+      if (controllers.has(sessionId)) {
+        parsedSession.controller = controllers.get(sessionId);
+      }
+      
+      return parsedSession;
+    } catch (error) {
+      console.error('Redis get error:', error);
+      return null;
+    }
+  },
+  
+  async set(sessionId: string, sessionData: any) {
+    try {
+      // Store controller separately in memory since it can't be serialized
+      if (sessionData.controller) {
+        controllers.set(sessionId, sessionData.controller);
+        
+        // Create a copy of session data without the controller for Redis storage
+        const serializableSession = { ...sessionData };
+        delete serializableSession.controller;
+        
+        // Set with an expiration of 1 hour
+        await redis.set(`session:${sessionId}`, JSON.stringify(serializableSession), 'EX', 3600);
+      } else {
+        // Store the session data as is
+        await redis.set(`session:${sessionId}`, JSON.stringify(sessionData), 'EX', 3600);
+      }
+      return true;
+    } catch (error) {
+      console.error('Redis set error:', error);
+      return false;
+    }
+  },
+  
+  async delete(sessionId: string) {
+    try {
+      // Remove from both Redis and memory
+      await redis.del(`session:${sessionId}`);
+      controllers.delete(sessionId);
+      return true;
+    } catch (error) {
+      console.error('Redis delete error:', error);
+      return false;
+    }
+  },
+  
+  async keys() {
+    try {
+      const keys = await redis.keys('session:*');
+      return keys.map(key => key.replace('session:', ''));
+    } catch (error) {
+      console.error('Redis keys error:', error);
+      return [];
+    }
+  },
+  
+  // For local development testing - check if both Redis and memory have the session
+  async has(sessionId: string) {
+    try {
+      const exists = await redis.exists(`session:${sessionId}`);
+      return exists === 1;
+    } catch (error) {
+      console.error('Redis exists error:', error);
+      return false;
+    }
+  }
+};
 
 // House data
 export const house = {

@@ -1,3 +1,9 @@
 {
-  "buildCommand": "pnpm install --no-frozen-lockfile && pnpm run build"
+  "buildCommand": "pnpm install --no-frozen-lockfile && pnpm run build",
+  "functions": {
+    "api/**/*": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  }
 } 
